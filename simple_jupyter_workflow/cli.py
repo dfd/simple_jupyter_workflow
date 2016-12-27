@@ -1,14 +1,35 @@
 import click
 import os
+import shutil
+#import imp
+import importlib.util
+#import constants
+
+dir_path = os.path.dirname(os.path.realpath(__file__))
+spec = importlib.util.spec_from_file_location('constants', dir_path + '/constants.py')
+constants = importlib.util.module_from_spec(spec)
+#click.echo(module_spec)
+spec.loader.exec_module(constants)
+
+class Config(object):
+
+    def __init__(self):
+        self.verbose = False
+
+pass_config = click.make_pass_decorator(Config, ensure=True)
 
 @click.group()
-def main():
-    pass
+@click.option('--verbose', '-v', is_flag=True,
+        help='Print all output to standard out')
+@pass_config
+def main(config, verbose):
+    config.verbose = verbose 
 
 @main.command()
 @click.option('--clone', '-c', default=None,
         help='Start a new project by cloning a git repo.')
-def new_project(clone=None):
+@pass_config
+def new_project(config, clone=None):
     """Sets up new sjwf project in current directory.
     
     Create a new project in the current directory, optionally by cloning
@@ -20,13 +41,29 @@ def new_project(clone=None):
 
     :param clone: a string of the URL for the git repository to clone
     """
-    click.echo('new project')
-    os.chdir('tests')
-    click.echo(os.listdir())
+    if config.verbose:
+        click.echo('Starting new project...')
+    try:
+        os.mkdir('./python_data')
+    except FileExistsError:
+        click.echo('python_data directory already exists.  Is there already a '
+                'project here?')
+    shutil.copyfile(dir_path + '/reference/settings.py', 'settings.py')
+    #os.chdir('tests')
+    #click.echo(os.listdir())
 
 @main.command()
-def build_image():
-    pass
+@pass_config
+def build_image(config):
+    click.echo('Starting to build image...')
+    #### don't work aMod = __import__(os.getcwd() + '/settings.py', globals(), locals(), [''])
+    #a, b, c = imp.find_module('settings', [os.getcwd()])
+    #imp.load_module('settings', a, b, c)
+    spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
+    settings = importlib.util.module_from_spec(spec)
+    #click.echo(module_spec)
+    spec.loader.exec_module(settings)
+    click.echo(settings.source)
 
 @main.command()
 def run_container():
