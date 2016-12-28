@@ -11,6 +11,13 @@ constants = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(constants)
 
 def load_pkl():
+    """Loads project dictionary from pickle.
+
+    Helper function that loads the project dictionary from a set location
+    defined in the constants module.
+
+    :return: `docker_dict` dictionary with project information
+    """
     if constants.DICT_PKL.is_file():
         with open(str(constants.DICT_PKL), 'rb') as f:
             docker_dict = pickle.load(f)
@@ -19,10 +26,28 @@ def load_pkl():
         return {}
 
 def write_pkl(docker_dict):
+    """Writes dictionary to pickle
+    
+    Stores dictionary with project information to a designated location
+    set by the constants module.
+
+    :param docker_dict: dictionary of project information
+
+    """
     with open(str(constants.DICT_PKL), 'wb') as f:
         pickle.dump(docker_dict, f)
 
 def get_container(container_id, client):
+    """Gets docker container object from a client given an ID
+
+    Returns a docker container object from a client for a given ID,
+    handling exceptions.
+
+    :param container_id: string of container ID
+    :param client: docker client
+    :return: `container` the docker container object
+
+    """
     try:
         container = client.containers.get(container_id)
     except NotFound:
@@ -37,6 +62,14 @@ def container_start(container):
 
 
 def container_stop(container, client, config):
+    """Stops a running container
+
+    Stops a running container within a client, handling exceptions.
+
+    :param container: docker container object to stop
+    :param client: docker client
+    :param config: Config class passed from main function
+    """
     try:
         container.stop()
     except timeout:
@@ -65,6 +98,11 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
         help='Print all output to standard out')
 @pass_config
 def main(config, verbose):
+    """Entry point function for CLI tool
+    
+    :param config: Config object with global options
+    :param verbose: flag indicating whether the output should be verbose
+    """
     config.verbose = verbose 
 
 @main.command()
@@ -81,6 +119,7 @@ def new_project(config, clone=None):
     directory.  Finally, settings.py and constants.py files will be created,
     if none exists.
 
+    :param config: Config object with global options
     :param clone: a string of the URL for the git repository to clone
     """
     if config.verbose:
@@ -95,16 +134,18 @@ def new_project(config, clone=None):
 @main.command()
 @pass_config
 def build_image(config):
+    """Builds or pulls Docker container image.
+
+    Builds a Docker image from a Dockerfile or pulls an image from Dockerhub.
+    The Dockerfile can be local, online, or in a git repo.
+
+    :param config: Config object with global options
+    """
     if config.verbose:
         click.echo('Starting to build image...')
-    #### don't work aMod = __import__(os.getcwd() + '/settings.py', globals(), locals(), [''])
-    #a, b, c = imp.find_module('settings', [os.getcwd()])
-    #imp.load_module('settings', a, b, c)
     spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
     settings = importlib.util.module_from_spec(spec)
-    #click.echo(module_spec)
     spec.loader.exec_module(settings)
-    #click.echo(settings.source)
     client = docker.from_env()
     if settings.source == constants.SOURCES.DOCKERFILE:
         image = client.images.build(**{'path':'.', 'rm':'TRUE'})
@@ -118,12 +159,19 @@ def build_image(config):
     docker_dict['image_id'] = image.short_id
     write_pkl(docker_dict)
     if config.verbose:
-        click.echo('Finished building image.')
+        click.echo('Image is ready.')
 
 
 @main.command()
 @pass_config
 def run_container(config):
+    """Runs the project container.
+
+    Runs the project container, binding the project directory to the container
+    directory specified by the settings.py file.
+
+    :param config: Config object with global options
+    """
     if config.verbose:
         click.echo('Attempting to run container...')
     spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
@@ -148,6 +196,12 @@ def run_container(config):
 @main.command()
 @pass_config
 def stop_container(config):
+    """Stops the project container.
+
+    Stops the project container, if it's running.
+
+    :param config: Config object with global options
+    """
     spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
     settings = importlib.util.module_from_spec(spec)
     #click.echo(module_spec)
@@ -169,6 +223,12 @@ def stop_container(config):
 @main.command()
 @pass_config
 def remove_container(config):
+    """Removes project container.
+
+    Removes the project container, if it exists.
+
+    :param config: Config object with global options
+    """
     client = docker.from_env()
 
     docker_dict = load_pkl()
@@ -183,6 +243,12 @@ def remove_container(config):
 @main.command()
 @pass_config
 def remove_image(config):
+    """Removes project image.
+
+    Removes the project image, if it exists.
+
+    :param config: Config object with global options
+    """
     client = docker.from_env()
     docker_dict = load_pkl()
     image_id = docker_dict.pop('image_id', False)
@@ -193,33 +259,32 @@ def remove_image(config):
         click.echo("No image in project.")
 
 @main.command()
-def git_branch():
+@pass_config
+def git_branch(config):
     pass
 
 @main.command()
-def git_commit():
+@pass_config
+def git_commit(config):
     pass
 
 @main.command()
-def git_merge():
+@pass_config
+def git_merge(config):
     pass
 
 @main.command()
-def git_push():
+@pass_config
+def git_push(config):
     pass
 
 @main.command()
-def git_rollback():
+@pass_config
+def git_rollback(config):
     pass
 
 @main.command()
-def project_info():
+@pass_config
+def project_info(config):
     pass
 
-#@click.command()
-#@click.option('--as-cowboy', '-c', is_flag=True, help='Greet as a cowboy.')
-#@click.argument('name', default='world', required=False)
-#def main(name, as_cowboy):
-#    """CLI with simple workflow for running Jupyter within Docker containers and version control for notebooks with git."""
-#    greet = 'Howdy' if as_cowboy else 'Hello'
-#    click.echo('{0}, {1}.'.format(greet, name))
