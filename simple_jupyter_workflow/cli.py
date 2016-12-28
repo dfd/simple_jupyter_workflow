@@ -135,7 +135,7 @@ def new_project(config, clone=None):
 
 @main.command()
 @pass_config
-def build_image(config):
+def prepare_image(config):
     """Builds or pulls Docker container image.
 
     Builds a Docker image from a Dockerfile or pulls an image from Dockerhub.
@@ -145,7 +145,7 @@ def build_image(config):
     """
     path_to_df = '.'
     if config.verbose:
-        click.echo('Starting to build image...')
+        click.echo('Starting to prepare image...')
     spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
     settings = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(settings)
@@ -157,6 +157,16 @@ def build_image(config):
         image = client.images.pull(settings.image_name, tag=settings.image_tag)
         if config.verbose:
             click.echo('Image pulled...')
+    elif source == constants.SOURCES.LOCAL_IMAGE:
+        if config.verbose:
+            click.echo('Using local image...')
+        try:
+            image = client.images.get(settings.image_id)
+        except docker.errors.ImageNotFound:
+            click.echo('Image not found.')
+            return
+        except:
+            click.echo("Unexpected error:", sys.exec_info()[0])
     elif source == constants.SOURCES.URL:
         if config.verbose:
             click.echo('Pulling Dockerfile from URL...')
@@ -289,6 +299,34 @@ def remove_image(config):
         write_pkl(docker_dict)
     else:
         click.echo("No image in project.")
+
+@main.command()
+@pass_config
+@click.pass_context
+def all_up(ctx, config):
+    """Prepares image and runs container
+
+    :param ctx: the clickcontext
+    "param config: Config object with global options
+    """
+    ctx.forward(prepare_image, config)
+    ctx.forward(run_container, config)
+
+
+@main.command()
+@pass_config
+@click.pass_context
+def destroy(ctx, config):
+    """Stops container, removes conatiner and removes the image
+
+    :param ctx: the clickcontext
+    :param config: Config object with global options
+    """
+    ctx.forward(stop_container, config)
+    ctx.forward(remove_container, config)
+    ctx.forward(remove_image, config)
+
+
 
 @main.command()
 @pass_config

@@ -3,7 +3,7 @@ import imp
 from simple_jupyter_workflow.constants import SOURCES
 
 # specify source of image
-# choices are DOCKERFILE, DOCKERHUB, URL, LOCAL_IMAGE
+# choices are DOCKERFILE, DOCKERHUB, URL, GIT, LOCAL_IMAGE
 #source = SOURCES.DOCKERHUB
 source = SOURCES.GIT
 
@@ -26,7 +26,7 @@ if source == SOURCES.GIT:
     df_name = 'Dockerfile'
 
 if source == SOURCES.LOCAL_IMAGE:
-    pass
+   image_id =  '15df50b84f9e'
 
 
 # define directory in container to bind to local notebooks directory
