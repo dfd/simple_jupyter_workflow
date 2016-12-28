@@ -4,6 +4,8 @@ import shutil
 import importlib.util
 import docker
 import pickle
+import urllib.request
+import git
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 spec = importlib.util.spec_from_file_location('constants', dir_path + '/constants.py')
@@ -141,20 +143,42 @@ def build_image(config):
 
     :param config: Config object with global options
     """
+    path_to_df = '.'
     if config.verbose:
         click.echo('Starting to build image...')
     spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
     settings = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(settings)
+    source = settings.source
     client = docker.from_env()
-    if settings.source == constants.SOURCES.DOCKERFILE:
-        image = client.images.build(**{'path':'.', 'rm':'TRUE'})
-    elif settings.source == constants.SOURCES.DOCKERHUB:
+    if source == constants.SOURCES.DOCKERHUB:
+        if config.verbose:
+            click.echo('Pulling image from Dockerhub...')
         image = client.images.pull(settings.image_name, tag=settings.image_tag)
         if config.verbose:
             click.echo('Image pulled...')
-    elif settings.source == constants.SOURCES.URL:
-        pass
+    elif source == constants.SOURCES.URL:
+        if config.verbose:
+            click.echo('Pulling Dockerfile from URL...')
+        with urllib.request.urlopen(settings.url) as response, open(os.getcwd() 
+                + '/Dockerfile', 'wb') as out_file:
+            shutil.copyfileobj(response, out_file)
+            source = constants.SOURCES.DOCKERFILE
+    elif source == constants.SOURCES.GIT:
+        if config.verbose:
+            click.echo('Cloning git repo...')
+        #os.mkdir('./Docker')
+        git.Repo.clone_from(settings.git_url, 'Docker', **{'depth':'1'})
+        shutil.rmtree('./Docker/.git', ignore_errors=True)
+        for root, dirs, files in os.walk('./Docker/'):
+            if settings.df_name in files:
+                path_to_df = os.path.join(root)
+                break
+        source = constants.SOURCES.DOCKERFILE
+    if source == constants.SOURCES.DOCKERFILE:
+        if config.verbose:
+            click.echo('Building image from Dockerfile...')
+        image = client.images.build(**{'path':path_to_df, 'rm':'TRUE'})
     docker_dict = load_pkl()
     docker_dict['image_id'] = image.short_id
     write_pkl(docker_dict)
@@ -229,6 +253,8 @@ def remove_container(config):
 
     :param config: Config object with global options
     """
+    if config.verbose:
+        click.echo('Attempting to remove container...')
     client = docker.from_env()
 
     docker_dict = load_pkl()
@@ -236,6 +262,8 @@ def remove_container(config):
     if container_id:
         container = client.containers.get(container_id)
         container.remove()
+        if config.verbose:
+            click.echo('Container removed.')
         write_pkl(docker_dict)
     else:
         click.echo("No container in project.")
@@ -249,11 +277,15 @@ def remove_image(config):
 
     :param config: Config object with global options
     """
+    if config.verbose:
+        click.echo('Attempting to remove image...')
     client = docker.from_env()
     docker_dict = load_pkl()
     image_id = docker_dict.pop('image_id', False)
     if image_id:
         client.images.remove(image_id)
+        if config.verbose:
+            click.echo('Image removed.')
         write_pkl(docker_dict)
     else:
         click.echo("No image in project.")
