@@ -1,0 +1,5 @@
+*.py[cod]
+*.sw*
+.gitignore~
+*.pkl
+.ipynb_checkpoints

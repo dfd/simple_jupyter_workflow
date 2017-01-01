@@ -327,31 +327,77 @@ def destroy(ctx, config):
     ctx.forward(remove_image, config)
 
 
+def get_repo():
+    return git.Repo('.')
 
 @main.command()
 @pass_config
-def git_branch(config):
-    pass
+def git_start(config):
+    spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
+    settings = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(settings)
+    shutil.copyfile(dir_path + '/reference/.gitignore', '.gitignore')
+    repo = git.Repo.init('.')
+    origin = repo.create_remote('origin', url=settings.git_origin)
+    repo.git.add(A=True)
+    commit = repo.index.commit('initial commit')
+
 
 @main.command()
 @pass_config
-def git_commit(config):
-    pass
+def branch(config):
+    repo = get_repo()
+    new_branch = repo.create_head('dev')
+    new_branch.checkout()
+
+@main.command()
+@click.argument('message')
+@pass_config
+def commit(config, message):
+    repo = get_repo()
+    repo.git.add(A=True)
+    commit = repo.index.commit(message)
 
 @main.command()
 @pass_config
-def git_merge(config):
-    pass
+def merge(config):
+    repo = get_repo()
+    repo.git.checkout('master')
+    repo.git.merge('master', 'dev')
 
 @main.command()
 @pass_config
-def git_push(config):
-    pass
+def push(config):
+    repo = get_repo()
+    #repo.git.push('--all')
+    repo.remotes.origin.push('--all')
 
 @main.command()
 @pass_config
-def git_rollback(config):
-    pass
+def rollback(config):
+    repo = get_repo()
+    repo.git.checkout('master')
+    #repo.git.branch('-D dev')
+    for branch in repo.branches:
+        if branch.name == 'dev':
+            repo.delete_head(branch, **{'force':'True'})
+            break
+
+@main.command()
+@click.argument('message')
+@pass_config
+@click.pass_context
+def commit_push(ctx, config, message):
+    """Prepares image and runs container
+
+    :param ctx: the clickcontext
+    "param config: Config object with global options
+    """
+    ctx.forward(commit, config)
+    ctx.invoke(merge, config)
+    ctx.invoke(push, config)
+
+
 
 @main.command()
 @pass_config

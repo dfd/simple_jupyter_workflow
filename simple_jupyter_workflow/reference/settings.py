@@ -2,10 +2,14 @@ import inspect, os
 import imp
 from simple_jupyter_workflow.constants import SOURCES
 
+
+# git repo for project
+git_origin = 'https://github.com/dfd/example_project.git'
+
 # specify source of image
 # choices are DOCKERFILE, DOCKERHUB, URL, GIT, LOCAL_IMAGE
-#source = SOURCES.DOCKERHUB
-source = SOURCES.GIT
+source = SOURCES.DOCKERHUB
+#source = SOURCES.GIT
 
 if source == SOURCES.DOCKERHUB:
     #name of image from Docker Hub
