@@ -21,7 +21,7 @@ setup(
     install_requires=dependencies,
     entry_points={
         'console_scripts': [
-            'sjwf = simple_jupyter_workflow.cli:main',
+            'simplej = simple_jupyter_workflow.cli:main',
         ],
     },
     classifiers=[

@@ -17,5 +17,5 @@ Simply run:
 
 To use it:
 
-    $ sjwf --help
+    $ simplej --help
 

@@ -6,11 +6,23 @@ import docker
 import pickle
 import urllib.request
 import git
+from requests.exceptions import ReadTimeout
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 spec = importlib.util.spec_from_file_location('constants', dir_path + '/constants.py')
 constants = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(constants)
+
+def verbose_message(config, message):
+    if config.verbose:
+        click.echo(message)
+
+def import_settings():
+    """Load settings module from project on demand"""
+    spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/simplej/settings.py')
+    settings = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(settings)
+    return settings
 
 def load_pkl():
     """Loads project dictionary from pickle.
@@ -74,7 +86,7 @@ def container_stop(container, client, config):
     """
     try:
         container.stop()
-    except timeout:
+    except ReadTimeout:
         print(timeout)
         container_list = client.containers.list(**{'id':container_id})
         if container_list:
@@ -85,8 +97,7 @@ def container_stop(container, client, config):
     except:
         click.echo("Unexpected error:", sys.exec_info()[0])
     else:
-        if config.verbose:
-            click.echo("Container stopped.")
+        verbose_message(config, "Container stopped.")
 
 class Config(object):
 
@@ -112,26 +123,24 @@ def main(config, verbose):
         help='Start a new project by cloning a git repo.')
 @pass_config
 def new_project(config, clone=None):
-    """Sets up new sjwf project in current directory.
+    """Sets up new simplej project in current directory.
     
     Create a new project in the current directory, optionally by cloning
-    a git repo.  A directory called 'python_data' will be created to hold a
+    a git repo.  A directory called 'simplej' will be created to hold a
     pickled dictionary of project information.  If a repository is passed
     as an argument, then the git repo will be cloned bare in the current
-    directory.  Finally, settings.py and constants.py files will be created,
-    if none exists.
+    directory.  Finally, settings.py will be created, if none exists.
 
     :param config: Config object with global options
     :param clone: a string of the URL for the git repository to clone
     """
-    if config.verbose:
-        click.echo('Starting new project...')
+    verbose_message(config, 'Starting new project...')
     try:
-        os.mkdir('./python_data')
+        os.mkdir('./simplej')
     except FileExistsError:
-        click.echo('python_data directory already exists.  Is there already a '
+        click.echo('simplej directory already exists.  Is there already a '
                 'project here?')
-    shutil.copyfile(dir_path + '/reference/settings.py', 'settings.py')
+    shutil.copyfile(dir_path + '/reference/settings.py', './simplej/settings.py')
 
 @main.command()
 @pass_config
@@ -144,22 +153,16 @@ def prepare_image(config):
     :param config: Config object with global options
     """
     path_to_df = '.'
-    if config.verbose:
-        click.echo('Starting to prepare image...')
-    spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
-    settings = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(settings)
+    verbose_message(config, 'Starting to prepare image...')
+    settings = import_settings()
     source = settings.source
     client = docker.from_env()
     if source == constants.SOURCES.DOCKERHUB:
-        if config.verbose:
-            click.echo('Pulling image from Dockerhub...')
+        verbose_message(config, 'Pulling image from Dockerhub...')
         image = client.images.pull(settings.image_name, tag=settings.image_tag)
-        if config.verbose:
-            click.echo('Image pulled...')
+        verbose_message(config, 'Image pulled...')
     elif source == constants.SOURCES.LOCAL_IMAGE:
-        if config.verbose:
-            click.echo('Using local image...')
+        verbose_message(config, 'Using local image...')
         try:
             image = client.images.get(settings.image_id)
         except docker.errors.ImageNotFound:
@@ -168,15 +171,13 @@ def prepare_image(config):
         except:
             click.echo("Unexpected error:", sys.exec_info()[0])
     elif source == constants.SOURCES.URL:
-        if config.verbose:
-            click.echo('Pulling Dockerfile from URL...')
+        verbose_message(config, 'Pulling Dockerfile from URL...')
         with urllib.request.urlopen(settings.url) as response, open(os.getcwd() 
                 + '/Dockerfile', 'wb') as out_file:
             shutil.copyfileobj(response, out_file)
             source = constants.SOURCES.DOCKERFILE
     elif source == constants.SOURCES.GIT:
-        if config.verbose:
-            click.echo('Cloning git repo...')
+        verbose_message(config, 'Cloning git repo...')
         #os.mkdir('./Docker')
         git.Repo.clone_from(settings.git_url, 'Docker', **{'depth':'1'})
         shutil.rmtree('./Docker/.git', ignore_errors=True)
@@ -192,8 +193,7 @@ def prepare_image(config):
     docker_dict = load_pkl()
     docker_dict['image_id'] = image.short_id
     write_pkl(docker_dict)
-    if config.verbose:
-        click.echo('Image is ready.')
+    verbose_message(config, 'Image is ready.')
 
 
 @main.command()
@@ -206,12 +206,8 @@ def run_container(config):
 
     :param config: Config object with global options
     """
-    if config.verbose:
-        click.echo('Attempting to run container...')
-    spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
-    settings = importlib.util.module_from_spec(spec)
-    #click.echo(module_spec)
-    spec.loader.exec_module(settings)
+    verbose_message(config, 'Attempting to run container...')
+    settings = import_settings()
     client = docker.from_env()
     docker_dict = load_pkl()
     container_id = docker_dict.get('container_id', False)
@@ -224,8 +220,7 @@ def run_container(config):
         container = client.containers.run(image_id, volumes=volumes, detach=True, ports={'8888/tcp':'8888', '6060/tcp':'6060'})
         docker_dict['container_id'] = container.short_id
         write_pkl(docker_dict)
-    if config.verbose:
-        click.echo('Container is running.')
+    verbose_message(config, 'Container is running.')
 
 @main.command()
 @pass_config
@@ -236,10 +231,7 @@ def stop_container(config):
 
     :param config: Config object with global options
     """
-    spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
-    settings = importlib.util.module_from_spec(spec)
-    #click.echo(module_spec)
-    spec.loader.exec_module(settings)
+    settings = import_settings()
     client = docker.from_env()
 
     docker_dict = load_pkl()
@@ -263,8 +255,7 @@ def remove_container(config):
 
     :param config: Config object with global options
     """
-    if config.verbose:
-        click.echo('Attempting to remove container...')
+    verbose_message(config, 'Attempting to remove container...')
     client = docker.from_env()
 
     docker_dict = load_pkl()
@@ -272,8 +263,7 @@ def remove_container(config):
     if container_id:
         container = client.containers.get(container_id)
         container.remove()
-        if config.verbose:
-            click.echo('Container removed.')
+        verbose_message(config, 'Container removed.')
         write_pkl(docker_dict)
     else:
         click.echo("No container in project.")
@@ -287,15 +277,13 @@ def remove_image(config):
 
     :param config: Config object with global options
     """
-    if config.verbose:
-        click.echo('Attempting to remove image...')
+    verbose_message(config, 'Attempting to remove image...')
     client = docker.from_env()
     docker_dict = load_pkl()
     image_id = docker_dict.pop('image_id', False)
     if image_id:
         client.images.remove(image_id)
-        if config.verbose:
-            click.echo('Image removed.')
+        verbose_message(config, 'Image removed.')
         write_pkl(docker_dict)
     else:
         click.echo("No image in project.")
@@ -333,51 +321,117 @@ def get_repo():
 @main.command()
 @pass_config
 def git_start(config):
-    spec = importlib.util.spec_from_file_location('settings', os.getcwd()+ '/settings.py')
-    settings = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(settings)
+    """Starts a git repo.
+
+    Starts a git repo; places a .gitignore file; adds an origin to the repo
+    from the settings file; and makes an initial commit to the repo.
+
+    :param config: Config object with global options
+    """
+    settings = import_settings()
     shutil.copyfile(dir_path + '/reference/.gitignore', '.gitignore')
     repo = git.Repo.init('.')
     origin = repo.create_remote('origin', url=settings.git_origin)
     repo.git.add(A=True)
     commit = repo.index.commit('initial commit')
 
+def print_branch(repo):
+    click.echo('Currently on branch', repo.active_branch.name)
+
 
 @main.command()
 @pass_config
 def branch(config):
+    """Starts a dev branch.
+
+    If the current branch is master, creates a new branch called dev and checks
+    it out.
+
+    :param config: Config object with global options
+    """
     repo = get_repo()
-    new_branch = repo.create_head('dev')
-    new_branch.checkout()
+    if repo.active_branch.name == 'master':
+        new_branch = repo.create_head('dev')
+        new_branch.checkout()
+    else:
+        click.echo('Not on master branch, so no new branch created.')
+        print_branch(repo)
 
 @main.command()
 @click.argument('message')
 @pass_config
 def commit(config, message):
+    """Commits changes to dev branch.
+
+    If the current branch is dev, add all files with changes, and commit.
+
+    :param config: Config object with global options
+    :param message: Message to be passed to git commit
+    """
     repo = get_repo()
-    repo.git.add(A=True)
-    commit = repo.index.commit(message)
+    if repo.active_branch.name == 'dev':
+        repo.git.add(A=True)
+        commit = repo.index.commit(message)
+    else:
+        click.echo('Not on dev branch, so no commit will be made.'
+                'Please use \'branch\' subcommand first.')
+        print_branch(repo)
 
 @main.command()
 @pass_config
 def merge(config):
+    """Merge commits from dev branch with master.
+
+    If the current branch is dev, then checkout master and merge with dev.
+
+    :param config: Config object with global options
+    """
     repo = get_repo()
-    repo.git.checkout('master')
-    repo.git.merge('master', 'dev')
+    if repo.active_branch.name == 'dev':
+        repo.git.checkout('master')
+        repo.git.merge('master', 'dev')
+    else:
+        click.echo('Not on dev branch, so no merge will be made.')
+        print_branch(repo)
 
 @main.command()
 @pass_config
-def push(config):
+def status(config):
+    """Print the git status.
+
+    :param config: Config object with global options
+    """
     repo = get_repo()
-    #repo.git.push('--all')
+    click.echo(repo.git.status())
+
+
+@main.command()
+@pass_config
+@click.pass_context
+def push(ctx, config):
+    """Push repo to origin.
+
+    Pushes repo to origin.  Prints warning if current branch is not master.
+
+    :param config: Config object with global options
+    """
+    repo = get_repo()
     repo.remotes.origin.push('--all')
+    if repo.active_branch.name != 'master':
+        click.echo('Warning: current branch is not master.')
+        print_branch(repo)
+        ctx.invoke(status, config)
 
 @main.command()
 @pass_config
 def rollback(config):
+    """Rollback to last master commit and delete the dev branch.
+
+    :param config: Config object with global options
+    """
     repo = get_repo()
     repo.git.checkout('master')
-    #repo.git.branch('-D dev')
+    #repo.git.branch('-D dev')  ## does not work
     for branch in repo.branches:
         if branch.name == 'dev':
             repo.delete_head(branch, **{'force':'True'})
@@ -388,10 +442,11 @@ def rollback(config):
 @pass_config
 @click.pass_context
 def commit_push(ctx, config, message):
-    """Prepares image and runs container
+    """ Commits a change, merges to master, and pushes the changes.
 
     :param ctx: the clickcontext
     "param config: Config object with global options
+    :param message: Message to be passed to git commit
     """
     ctx.forward(commit, config)
     ctx.invoke(merge, config)
@@ -401,6 +456,15 @@ def commit_push(ctx, config, message):
 
 @main.command()
 @pass_config
-def project_info(config):
-    pass
+@click.pass_context
+def project_info(ctx, config):
+    """Display the projevt information
+
+    Display the image and container IDs, and the git status.
+
+    :param ctx: the clickcontext
+    "param config: Config object with global options
+    """
+    click.echo(load_pkl())
+    ctx.invoke(status, config)
 
