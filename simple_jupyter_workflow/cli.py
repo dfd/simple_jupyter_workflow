@@ -231,7 +231,6 @@ def stop_container(config):
 
     :param config: Config object with global options
     """
-    settings = import_settings()
     client = docker.from_env()
 
     docker_dict = load_pkl()
@@ -287,6 +286,24 @@ def remove_image(config):
         write_pkl(docker_dict)
     else:
         click.echo("No image in project.")
+
+@main.command()
+@pass_config
+def show_token(config):
+    """Shows  currently running Jupyter notebook servers, including token
+
+    Runs `docker exec <container_id> jupyter notebook list`
+
+    :param config: Config object with global options
+    """
+    client = docker.APIClient()
+
+    docker_dict = load_pkl()
+    container_id = docker_dict.get('container_id', False)
+    exec_id = client.exec_create(container=container_id,
+            cmd='jupyter notebook list')
+    click.echo(client.exec_start(exec_id))
+
 
 @main.command()
 @pass_config
